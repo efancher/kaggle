@@ -1,0 +1,134 @@
+---
+title: "Chapter 1"
+output: html_document
+---
+
+https://campus.datacamp.com/courses/kaggle-r-tutorial-on-machine-learning/chapter-1-raising-anchor
+
+
+```{r}
+train_url <- "http://s3.amazonaws.com/assets.datacamp.com/course/Kaggle/train.csv"
+if (! file.exists("train.csv")){
+  download.file(train_url, "train.csv")
+}
+train <- read.csv("train.csv")
+  
+# Import the testing set: test
+test_url <- "http://s3.amazonaws.com/assets.datacamp.com/course/Kaggle/test.csv"
+if (! file.exists("test.csv")){
+  download.file(test_url, "test.csv")
+}
+
+test <- read.csv("test.csv")
+  
+# Print train and test to the console
+train
+test
+```
+
+```{r}
+# Passengers that survived vs passengers that passed away
+table(train$Survived) 
+
+# As proportions
+# absolute numbers
+table(train$Survived) 
+
+# percentages
+prop.table(table(train$Survived))
+  
+# Males & females that survived vs males & females that passed away
+table(train$Sex, train$Survived)
+
+# As row-wise proportions
+prop.table(table(train$Sex, train$Survived), margin=1)
+
+
+```
+
+```{r}
+train$Child[train$Age >= 18] <- 0
+train$Child[is.na(train$Age)] <- NA
+train$Child[train$Age < 18] <- 1
+prop.table(table(train$Child, train$Survived), margin=1)
+
+```
+
+
+### This one gets .7655
+```{r}
+test_one = test
+test_one$Survived = 0
+test_one$Survived[test_one$Sex == "female"] <- 1
+head(test_one)
+
+```
+
+### logistic
+```{r}
+
+titanic_log = glm(family=binomial, data=train, formula=Survived ~ Pclass + Sex + Age )
+summary(titanic_log)
+test_two = test
+test_two$Survived = 0
+test_two.pred = predict(titanic_log, test_two, type="response")
+test_two$Survived = ifelse(test_two.pred > 0.5, 1, 0)
+test_two$Survived = ifelse(is.na(test_two$Survived), 0 ,test_two$Survived)
+head(test_two)
+test_two_out = data.frame(PassengerId=test_two$PassengerId, Survived=test_two$Survived)
+write.csv(test_two_out, "my_solution_test_two.csv", row.names=FALSE)
+
+# 177 get dropped
+test[rowSums(is.na(test)) > 0,]
+```
+
+
+# All the NA's are age.
+
+Think we can predict the age using a multinomial logistic regression on some of the other fields, so, maybe a class mean imputation.
+http://www.ats.ucla.edu/stat/r/dae/mlogit.htm
+
+```{r}
+
+## This one gets  0.77033, so small improvement!
+age_lm = lm(data=train, formula=Age~Pclass + Sex + SibSp + Parch + Fare + Embarked)
+library(leaps)
+leaps<-regsubsets(Age~Pclass + Sex + SibSp + Parch + Fare + Embarked,data=train,nbest=5)
+# view results 
+plot(leaps, scale="bic")
+summary(age_lm)
+# looks like Pclass, Sex and SibSp are good predictors
+age_lm2 = lm(data=train, formula=Age~Pclass + Sex + SibSp)
+
+predict(age_lm2,train[rowSums(is.na(train)) > 0,])
+new_train = train
+new_train$Age[rowSums(is.na(train)) > 0] = predict(age_lm2,train[rowSums(is.na(train)) > 0,])
+
+titanic_log2 = glm(family=binomial, data=new_train, formula=Survived ~ Pclass + Sex + Age + SibSp)
+
+summary(titanic_log2)
+test_three= test
+test_three$Survived = 0
+test_three.pred = predict(titanic_log2, test_three, type="response")
+test_three$Survived = ifelse(test_three.pred > 0.5, 1, 0)
+test_three$Survived = ifelse(is.na(test_three$Survived), 0 ,test_three$Survived)
+head(test_three)
+test_three_out = data.frame(PassengerId=test_three$PassengerId, Survived=test_three$Survived)
+write.csv(test_three_out, "my_solution_test_three.csv", row.names=FALSE)
+
+```
+
+Should do another try, but set survived percentage at .33, since 2/3 of people actually died.
+```{r}
+test_four = train
+test_four.pred = predict(titanic_log2, test_four, type="response")
+test_four$Survived = ifelse(test_four.pred > 0.66, 1, 0)
+test_four$Survived = ifelse(is.na(test_four$Survived), 0 ,test_four$Survived)
+head(test_four)
+test_four_out = data.frame(PassengerId=test_four$PassengerId, Survived=test_four$Survived)
+write.csv(test_four_out, "my_solution_test_four.csv", row.names=FALSE)
+```
+
+# other ideas
+# check diagnostics
+
